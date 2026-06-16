@@ -14,6 +14,10 @@ import { useFormValidation } from "@/hooks/useFormValidation";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { QRScanner } from "@/components/QRScanner";
 import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 
 interface Part {
   id: string;
@@ -76,9 +80,17 @@ export default function Home() {
     serviceCharges: 0,
   };
 
+  const { user } = useAuth();
   const [record, setRecord] = useLocalStorage<ServiceRecord>("goldwing_service_record", defaultRecord);
   const [history, setHistory] = useLocalStorage<ServiceRecord[]>("goldwing_service_history", []);
   const { errors, validateServiceRecord } = useFormValidation();
+  
+  // Load records from backend when user logs in
+  const { data: backendRecords } = trpc.serviceRecords.list.useQuery(undefined, {
+    enabled: !!user,
+  });
+  
+  const createRecordMutation = trpc.serviceRecords.create.useMutation();
 
   const [showQR, setShowQR] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -148,16 +160,51 @@ export default function Home() {
     return partsCost + (record.serviceCharges || 0);
   };
 
-  const handleGenerateQR = () => {
+  const handleGenerateQR = async () => {
     if (validateServiceRecord(record)) {
-      // Save to history
-      const newRecord = {
-        ...record,
-        id: Date.now().toString(),
-        timestamp: new Date().toISOString(),
-      };
-      setHistory([...history, newRecord]);
-      setShowQR(true);
+      if (!user) {
+        toast.error("Please login to save records");
+        return;
+      }
+
+      try {
+        // Save to backend database
+        await createRecordMutation.mutateAsync({
+          date: record.date,
+          brand: record.brand,
+          model: record.model,
+          serialNo: record.serialNo,
+          useInPlace: record.useInPlace || "",
+          purchaseLocation: record.purchaseLocation,
+          customerName: record.customerName,
+          phone: record.phone,
+          address: record.address || "",
+          inTime: record.inTime || "",
+          outTime: record.outTime || "",
+          coffeeChecked: record.checklist.coffee ? 1 : 0,
+          waterChecked: record.checklist.water ? 1 : 0,
+          descalingChecked: record.checklist.descaling ? 1 : 0,
+          milkCleanChecked: record.checklist.milkClean ? 1 : 0,
+          technicalIssues: record.technicalIssues || "",
+          repairedBy: record.repairedBy || "",
+          serviceCharges: record.serviceCharges || 0,
+          partsJson: JSON.stringify(record.parts),
+          totalAmount: calculateTotalCost(),
+        });
+        
+        // Also save to local history for display
+        const newRecord = {
+          ...record,
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+        };
+        setHistory([...history, newRecord]);
+        setShowQR(true);
+        toast.success("Service record saved successfully!");
+      } catch (error) {
+        console.error("Failed to save record:", error);
+        toast.error("Failed to save service record");
+      }
     }
   };
 
@@ -172,6 +219,53 @@ export default function Home() {
       validateServiceRecord(record);
     }
   }, [record]);
+
+  // Sync backend records to local history when user logs in
+  useEffect(() => {
+    if (backendRecords && backendRecords.length > 0) {
+      const convertedRecords = backendRecords.map((r: any) => ({
+        date: r.date,
+        brand: r.brand,
+        model: r.model,
+        serialNo: r.serialNo,
+        useInPlace: r.useInPlace || "",
+        purchaseLocation: r.purchaseLocation,
+        customerName: r.customerName,
+        phone: r.phone,
+        address: r.address || "",
+        inTime: r.inTime || "",
+        outTime: r.outTime || "",
+        checklist: {
+          coffee: r.coffeeChecked === 1,
+          water: r.waterChecked === 1,
+          descaling: r.descalingChecked === 1,
+          milkClean: r.milkCleanChecked === 1,
+        },
+        technicalIssues: r.technicalIssues || "",
+        parts: r.partsJson ? JSON.parse(r.partsJson) : [],
+        repairedBy: r.repairedBy || "",
+        serviceCharges: r.serviceCharges || 0,
+      }));
+      setHistory(convertedRecords);
+    }
+  }, [backendRecords]);
+
+  // Check if user is logged in
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Login Required</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-gray-600 mb-4">Please login to use the Goldwing Service Record App</p>
+            <Button className="w-full" onClick={() => window.location.href = "/api/oauth/callback"}>Login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const generateQRData = () => {
     return JSON.stringify({
