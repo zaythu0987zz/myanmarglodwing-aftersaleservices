@@ -605,7 +605,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="text-center mt-8 text-gray-500 text-sm">
-          <p>Made with Manus</p>
+          <p>Made with ZLP</p>
         </div>
       </div>
 
