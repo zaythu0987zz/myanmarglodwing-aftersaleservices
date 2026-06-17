@@ -52,6 +52,7 @@ interface ServiceRecord {
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const [error, setError] = useState<string | null>(null);
 
   const defaultRecord: ServiceRecord = {
     date: new Date().toISOString().split("T")[0],
@@ -161,16 +162,17 @@ export default function Home() {
   };
 
   const handleGenerateQR = async () => {
-    if (validateServiceRecord(record)) {
-      if (!user) {
-        alert("Please login to save records");
-        return;
-      }
+    try {
+      if (validateServiceRecord(record)) {
+        if (!user) {
+          alert("Please login to save records");
+          return;
+        }
 
-      try {
-        // Save to backend database
-        console.log("Saving service record...");
-        await createRecordMutation.mutateAsync({
+        try {
+          // Save to backend database
+          console.log("Saving service record...");
+          await createRecordMutation.mutateAsync({
           date: record.date,
           brand: record.brand,
           model: record.model,
@@ -200,12 +202,16 @@ export default function Home() {
           timestamp: new Date().toISOString(),
         };
         setHistory([...history, newRecord]);
-        setShowQR(true);
-        alert("Service record saved successfully!");
-      } catch (error) {
-        console.error("Failed to save record:", error);
-        alert("Failed to save service record");
+          setShowQR(true);
+          alert("Service record saved successfully!");
+        } catch (error) {
+          console.error("Failed to save record:", error);
+          alert("Failed to save service record");
+        }
       }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      setError("An unexpected error occurred. Please try again.");
     }
   };
 
@@ -223,31 +229,36 @@ export default function Home() {
 
   // Sync backend records to local history when user logs in
   useEffect(() => {
-    if (backendRecords && backendRecords.length > 0) {
-      const convertedRecords = backendRecords.map((r: any) => ({
-        date: r.date,
-        brand: r.brand,
-        model: r.model,
-        serialNo: r.serialNo,
-        useInPlace: r.useInPlace || "",
-        purchaseLocation: r.purchaseLocation,
-        customerName: r.customerName,
-        phone: r.phone,
-        address: r.address || "",
-        inTime: r.inTime || "",
-        outTime: r.outTime || "",
-        checklist: {
-          coffee: r.coffeeChecked === 1,
-          water: r.waterChecked === 1,
-          descaling: r.descalingChecked === 1,
-          milkClean: r.milkCleanChecked === 1,
-        },
-        technicalIssues: r.technicalIssues || "",
-        parts: r.partsJson ? JSON.parse(r.partsJson) : [],
-        repairedBy: r.repairedBy || "",
-        serviceCharges: r.serviceCharges || 0,
-      }));
-      setHistory(convertedRecords);
+    try {
+      if (backendRecords && backendRecords.length > 0) {
+        const convertedRecords = backendRecords.map((r: any) => ({
+          date: r.date,
+          brand: r.brand,
+          model: r.model,
+          serialNo: r.serialNo,
+          useInPlace: r.useInPlace || "",
+          purchaseLocation: r.purchaseLocation,
+          customerName: r.customerName,
+          phone: r.phone,
+          address: r.address || "",
+          inTime: r.inTime || "",
+          outTime: r.outTime || "",
+          checklist: {
+            coffee: r.coffeeChecked === 1,
+            water: r.waterChecked === 1,
+            descaling: r.descalingChecked === 1,
+            milkClean: r.milkCleanChecked === 1,
+          },
+          technicalIssues: r.technicalIssues || "",
+          parts: r.partsJson ? JSON.parse(r.partsJson) : [],
+          repairedBy: r.repairedBy || "",
+          serviceCharges: r.serviceCharges || 0,
+        }));
+        setHistory(convertedRecords);
+      }
+    } catch (err) {
+      console.error("Error syncing backend records:", err);
+      setError("Failed to sync records from server");
     }
   }, [backendRecords]);
 
@@ -262,8 +273,35 @@ export default function Home() {
           <CardContent className="text-center">
             <p className="text-gray-600 mb-4">Please login to use the Goldwing Service Record App</p>
             <Button className="w-full" onClick={() => {
-              window.location.href = getLoginUrl();
+              try {
+                const loginUrl = getLoginUrl();
+                if (loginUrl) {
+                  window.location.href = loginUrl;
+                } else {
+                  alert("Unable to generate login URL. Please try again.");
+                }
+              } catch (err) {
+                console.error("Login error:", err);
+                alert("An error occurred during login. Please try again.");
+              }
             }}>Login</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show error if one occurred
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center text-red-600">Error</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button className="w-full" onClick={() => setError(null)}>Dismiss</Button>
           </CardContent>
         </Card>
       </div>
