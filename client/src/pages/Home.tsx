@@ -17,6 +17,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect, useRef } from "react";
+import { getLoginUrl } from "@/const";
 
 interface Part {
   id: string;
@@ -261,8 +262,7 @@ export default function Home() {
           <CardContent className="text-center">
             <p className="text-gray-600 mb-4">Please login to use the Goldwing Service Record App</p>
             <Button className="w-full" onClick={() => {
-              const origin = window.location.origin;
-              window.location.href = `${origin}/api/oauth/callback`;
+              window.location.href = getLoginUrl();
             }}>Login</Button>
           </CardContent>
         </Card>
