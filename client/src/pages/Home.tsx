@@ -17,7 +17,6 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect, useRef } from "react";
-import { toast } from "sonner";
 
 interface Part {
   id: string;
@@ -163,12 +162,13 @@ export default function Home() {
   const handleGenerateQR = async () => {
     if (validateServiceRecord(record)) {
       if (!user) {
-        toast.error("Please login to save records");
+        alert("Please login to save records");
         return;
       }
 
       try {
         // Save to backend database
+        console.log("Saving service record...");
         await createRecordMutation.mutateAsync({
           date: record.date,
           brand: record.brand,
@@ -200,10 +200,10 @@ export default function Home() {
         };
         setHistory([...history, newRecord]);
         setShowQR(true);
-        toast.success("Service record saved successfully!");
+        alert("Service record saved successfully!");
       } catch (error) {
         console.error("Failed to save record:", error);
-        toast.error("Failed to save service record");
+        alert("Failed to save service record");
       }
     }
   };
@@ -260,7 +260,10 @@ export default function Home() {
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-gray-600 mb-4">Please login to use the Goldwing Service Record App</p>
-            <Button className="w-full" onClick={() => window.location.href = "/api/oauth/callback"}>Login</Button>
+            <Button className="w-full" onClick={() => {
+              const origin = window.location.origin;
+              window.location.href = `${origin}/api/oauth/callback`;
+            }}>Login</Button>
           </CardContent>
         </Card>
       </div>
